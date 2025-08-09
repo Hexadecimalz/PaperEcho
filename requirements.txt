@@ -1,0 +1,4 @@
+flask
+escpos
+requests
+pillow

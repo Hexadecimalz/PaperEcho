@@ -1,0 +1,39 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+.venv/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Flask instance folder (for local runtime files)
+instance/
+
+# Local config (keep secrets out of git)
+config.json
+
+# Test output / print simulation files
+print_output/
+*.tmp
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# Temporary files
+*.swp
+*.swo
