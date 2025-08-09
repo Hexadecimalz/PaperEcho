@@ -5,13 +5,15 @@ from pathlib import Path
 import os, json, time, unicodedata, re, random
 from typing import Iterable
 
-# ---------- Config ----------
+# ---------- Paths / Config ----------
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = PROJECT_ROOT / "config.json"
-QUOTES_PATH = PROJECT_ROOT / "quotes" / "quotes.txt"
+CONFIG_PATH  = PROJECT_ROOT / "config.json"
+QUOTES_DIR   = PROJECT_ROOT / "quotes"
+QUOTES_PATH  = QUOTES_DIR / "quotes.tsv"     # TSV: text \t author \t source(optional)
+STATE_PATH   = QUOTES_DIR  / ".state.json"   # rotation state
 
 DEFAULTS = {
-    # existing keys
+    # existing keys you already use
     "weather_api_key": "",
     "weather_location": "Denver,US",
     "weather_enabled": False,
@@ -19,11 +21,11 @@ DEFAULTS = {
     "quote_footer_enabled": True,
     "test_mode": False,
     "printer_device": "/dev/usb/lp0",
-    # new keys
-    "cols": 42,
-    "printer_width_px": 384,
-    "max_image_height_px": 4096,
-    "raster_chunk_rows": 160
+    # new keys (safe defaults)
+    "cols": 42,                  # body columns at normal size (common: 42 or 48)
+    "printer_width_px": 384,     # image raster width; try 576 if supported
+    "max_image_height_px": 4096, # cap super-tall images (0 = no cap)
+    "raster_chunk_rows": 160     # rows per chunk to avoid buffer overruns
 }
 
 def load_config() -> dict:
@@ -37,36 +39,43 @@ def load_config() -> dict:
         merged["printer_device"] = os.getenv("PRINTER_DEVICE")
     return merged
 
-# ---------- ESC/POS ----------
+# ---------- ESC/POS Primitives ----------
 ESC = b"\x1B"; GS = b"\x1D"
+
 INIT = ESC + b"@"
 ALIGN_LEFT   = ESC + b"\x61\x00"
 ALIGN_CENTER = ESC + b"\x61\x01"
-BOLD_ON  = ESC + b"\x45\x01"
-BOLD_OFF = ESC + b"\x45\x00"
-CUT_PARTIAL = GS + b"\x56\x41\x00"
+BOLD_ON      = ESC + b"\x45\x01"
+BOLD_OFF     = ESC + b"\x45\x00"
+CUT_PARTIAL  = GS  + b"\x56\x41\x00"  # GS V A 0 (partial cut)
 
 def char_size(w: int = 1, h: int = 1) -> bytes:
+    """GS ! n   (w,h in 1..8)"""
     w = max(1, min(8, w)) - 1
     h = max(1, min(8, h)) - 1
     return GS + b"\x21" + bytes([(w << 4) | h])
 
 def set_codepage_cp437() -> bytes:
-    return ESC + b"\x74\x00"  # CP437 on most models
+    """ESC t 0  (CP437 on most models)"""
+    return ESC + b"\x74\x00"
 
 # ---------- Text helpers ----------
-SMART_QUOTE_MAP = {
+SMART_MAP = {
     "“": '"', "”": '"', "„": '"', "‟": '"',
     "‘": "'", "’": "'", "‚": "'", "‛": "'",
     "—": "-", "–": "-", "…": "...",
     "\u00A0": " ",
 }
+
 def sanitize_text(s: str) -> str:
     s = unicodedata.normalize("NFKC", s)
-    for k, v in SMART_QUOTE_MAP.items(): s = s.replace(k, v)
+    for k, v in SMART_MAP.items():
+        s = s.replace(k, v)
+    # filter non-printables except \n and \t
     return "".join(ch if (32 <= ord(ch) <= 126) or ch in "\n\t" else "?" for ch in s)
 
 def wrap_text(text: str, cols: int) -> list[str]:
+    """Word-wrap without breaking words. Preserves paragraph breaks."""
     lines: list[str] = []
     paras = text.splitlines() if "\n" in text else [text]
     for para in paras:
@@ -87,53 +96,119 @@ def wrap_text(text: str, cols: int) -> list[str]:
 
 def date_line() -> str:
     tm = time.localtime()
-    try:    return time.strftime("%a %b %-d %Y %-I:%M %p", tm)
-    except: 
+    try:
+        return time.strftime("%a %b %-d %Y %-I:%M %p", tm)
+    except Exception:
         s = time.strftime("%a %b %d %Y %I:%M %p", tm)
-        return re.sub(r"\b0(\d)\b", r"\1", s)
+        return re.sub(r"\b0(\d)\b", r"\1", s)  # drop leading zeros
 
 def encode_escpos(text: str) -> bytes:
     return sanitize_text(text).encode("cp437", errors="replace")
 
-# Quotes
-def _load_quotes() -> list[str]:
+# ---------- Quotes (rotation without repeats) ----------
+def _ensure_quotes_dir():
+    QUOTES_DIR.mkdir(parents=True, exist_ok=True)
+
+def _load_quotes_tsv() -> list[dict]:
+    """
+    Read quotes.tsv as: text<TAB>author<TAB>source?
+    Returns [{"text": str, "author": str|None, "source": str|None}, ...]
+    """
+    _ensure_quotes_dir()
+    quotes = []
     try:
         with open(QUOTES_PATH, "r", encoding="utf-8") as f:
-            lines = [ln.strip() for ln in f]
-        return [q for q in lines if q and not q.lstrip().startswith("#")]
+            for ln in f:
+                ln = ln.strip()
+                if not ln or ln.lstrip().startswith("#"):  # skip blanks/comments
+                    continue
+                parts = ln.split("\t")
+                text   = parts[0].strip() if len(parts) > 0 else ""
+                author = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+                source = parts[2].strip() if len(parts) > 2 and parts[2].strip() else None
+                if text:
+                    quotes.append({"text": text, "author": author, "source": source})
     except FileNotFoundError:
-        return []
-def _random_quote() -> str | None:
-    qs = _load_quotes()
-    return random.choice(qs) if qs else None
+        pass
+    return quotes
+
+def _load_state() -> dict:
+    try:
+        with open(STATE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_state(state: dict):
+    try:
+        with open(STATE_PATH, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+    except Exception:
+        pass
+
+def _next_quote() -> dict | None:
+    """
+    Persistent shuffled rotation. No repeats until the cycle ends.
+    Reshuffles automatically if the quotes file changes length.
+    """
+    quotes = _load_quotes_tsv()
+    if not quotes:
+        return None
+
+    state = _load_state()
+    if "order" not in state or "idx" not in state or state.get("n") != len(quotes):
+        order = list(range(len(quotes)))
+        random.shuffle(order)
+        state = {"order": order, "idx": 0, "n": len(quotes)}
+        _save_state(state)
+
+    order = state["order"]; idx = state["idx"]; n = state["n"]
+    if idx >= n:
+        order = list(range(n))
+        random.shuffle(order)
+        idx = 0
+    sel = quotes[order[idx]]
+    state.update({"order": order, "idx": idx + 1})
+    _save_state(state)
+    return sel
 
 # ---------- I/O ----------
 def _write_raw(payload: bytes, device: str, simulate: bool):
     if simulate:
-        print("[SIMULATE PRINT]", payload[:120], f"...({len(payload)} bytes)", flush=True); return
-    with open(device, "wb", buffering=0) as f: f.write(payload)
+        print("[SIMULATE PRINT]", payload[:120], f"...({len(payload)} bytes)", flush=True)
+        return
+    with open(device, "wb", buffering=0) as f:
+        f.write(payload)
 
 # ---------- Layout blocks ----------
-def _header_block(title: str | None = None, big_title: bool = True, show_date: bool = True) -> bytes:
-    parts: list[bytes] = [INIT, set_codepage_cp437(), ALIGN_CENTER]
-    # Big title first
+def _header_block(title: str | None = None, show_date: bool = True) -> bytes:
+    """
+    Big bold title (double size), then smaller bold date underneath.
+    """
+    chunks: list[bytes] = [INIT, set_codepage_cp437(), ALIGN_CENTER]
     if title:
-        parts += [BOLD_ON, char_size(2,2), encode_escpos(title), BOLD_OFF, char_size(1,1), b"\n"]
-    # Smaller date UNDER the title
+        chunks += [BOLD_ON, char_size(2,2), encode_escpos(title), BOLD_OFF, char_size(1,1), b"\n"]
     if show_date:
-        parts += [BOLD_ON, char_size(1,1), encode_escpos(date_line()), BOLD_OFF, b"\n"]
-    # spacer + left align
-    parts += [b"\n", ALIGN_LEFT]
-    return b"".join(parts)
+        chunks += [BOLD_ON, encode_escpos(date_line()), BOLD_OFF, b"\n"]
+    chunks += [b"\n", ALIGN_LEFT]
+    return b"".join(chunks)
 
 def _body_block(text: str, cols: int) -> bytes:
     return b"".join(encode_escpos(line) + b"\n" for line in wrap_text(text, cols))
 
 def _quote_block(enabled: bool) -> bytes:
-    if not enabled: return b""
-    q = _random_quote() or "Small steps beat grand plans."
-    q = sanitize_text(q)
-    return b"\n" + encode_escpos(f"\"{q}\"") + b"\n"
+    if not enabled:
+        return b""
+    q = _next_quote()
+    if not q:
+        return b""
+    text = f"\"{q['text']}\""
+    by = []
+    if q.get("author"): by.append(q["author"])
+    if q.get("source"): by.append(q["source"])
+    byline = (" — " + ", ".join(by)) if by else ""
+    body = text + ("\n" + byline if byline else "")
+    return encode_escpos(body) + b"\n"
 
 def _finalize() -> bytes:
     return b"\n\n" + CUT_PARTIAL
@@ -141,14 +216,14 @@ def _finalize() -> bytes:
 def _print_payload(chunks: Iterable[bytes]):
     cfg = load_config()
     dev = cfg["printer_device"]
-    simulate = cfg.get("test_mode", False)
+    simulate = cfg.get("test_mode", False)  # map your key
     _write_raw(b"".join(chunks), dev, simulate)
 
 # ---------- Public text APIs ----------
 def print_note(note: str, include_quote: bool):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     chunks = [
-        _header_block("NOTE", big_title=True, show_date=True),
+        _header_block("NOTE", show_date=True),
         _body_block(note, cols),
         _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
         _finalize(),
@@ -157,9 +232,9 @@ def print_note(note: str, include_quote: bool):
 
 def print_todo(todo: str, include_quote: bool):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
-    body = f"[ ] {todo}" if todo.strip() else ""  # avoid printing placeholder/empty
+    body = f"[ ] {todo.strip()}" if todo and todo.strip() else ""
     chunks = [
-        _header_block("TODO", big_title=True, show_date=True),
+        _header_block("TODO", show_date=True),
         _body_block(body, cols),
         _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
         _finalize(),
@@ -170,7 +245,7 @@ def print_achievement(text: str, include_quote: bool):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     body = f"* {text.strip()}"
     chunks = [
-        _header_block("ACHIEVEMENT", big_title=True, show_date=True),
+        _header_block("ACHIEVEMENT", show_date=True),
         _body_block(body, cols),
         _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
         _finalize(),
@@ -181,61 +256,78 @@ def print_weather_report():
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     body = "Temp: 72 deg F  High: 88 deg F  Low: 64 deg F\nClear skies"
     chunks = [
-        _header_block("WEATHER", big_title=True, show_date=True),
+        _header_block("WEATHER", show_date=True),
         _body_block(body, cols),
         _finalize(),
     ]
     _print_payload(chunks)
 
-# ---------- Image printing ----------
+# ---------- Image printing (ESC/POS raster, chunked) ----------
 def _to_mono_bitmap(path: str, target_width_px: int, max_height_px: int) -> "Image.Image":
+    """Open, EXIF-rotate, scale to width, cap height, dither to 1-bit."""
     from PIL import Image, ImageOps
-    img = Image.open(path); img = ImageOps.exif_transpose(img)
+    img = Image.open(path)
+    img = ImageOps.exif_transpose(img)
     w0, h0 = img.size
     scale = target_width_px / float(w0)
-    new_w, new_h = target_width_px, max(1, int(round(h0 * scale)))
+    new_w = target_width_px
+    new_h = max(1, int(round(h0 * scale)))
     img = img.resize((new_w, new_h))
     if max_height_px and new_h > max_height_px:
         scale2 = max_height_px / float(new_h)
-        new_w2, new_h2 = max(1, int(round(new_w * scale2))), max_height_px
-        img = img.resize((new_w2, new_h2)); new_w, new_h = img.size
+        new_w2 = max(1, int(round(new_w * scale2)))
+        new_h2 = max_height_px
+        img = img.resize((new_w2, new_h2))
+        new_w, new_h = img.size
         if new_w < target_width_px:
             canvas = Image.new("L", (target_width_px, new_h), 255)
-            canvas.paste(img, ((target_width_px - new_w)//2, 0)); img = canvas
-    return img.convert("1")
+            canvas.paste(img, ((target_width_px - new_w)//2, 0))
+            img = canvas
+    return img.convert("1")  # 1-bit dither
 
 def _pack_bits_row(img, y: int) -> bytes:
-    w, _ = img.size; out = bytearray(); byte = 0; bitpos = 7
+    w, _ = img.size
+    out = bytearray()
+    byte = 0; bitpos = 7
     for x in range(w):
-        if img.getpixel((x, y)) == 0: byte |= (1 << bitpos)
+        if img.getpixel((x, y)) == 0:
+            byte |= (1 << bitpos)  # black dot on
         bitpos -= 1
-        if bitpos < 0: out.append(byte); byte = 0; bitpos = 7
-    if bitpos != 7: out.append(byte)
+        if bitpos < 0:
+            out.append(byte); byte = 0; bitpos = 7
+    if bitpos != 7:
+        out.append(byte)
     return bytes(out)
 
 def _raster_chunk_cmd(img, y_start: int, rows: int) -> bytes:
+    """GS v 0 m xL xH yL yH + data for a band of rows (m=0)."""
     w, h = img.size
-    rows = min(rows, h - y_start); row_bytes = (w + 7) // 8
+    rows = min(rows, h - y_start)
+    row_bytes = (w + 7) // 8
     xL, xH = row_bytes & 0xFF, (row_bytes >> 8) & 0xFF
     yL, yH = rows & 0xFF, (rows >> 8) & 0xFF
     header = GS + b"v0" + b"\x00" + bytes([xL, xH, yL, yH])
     body = bytearray()
-    for y in range(y_start, y_start + rows): body += _pack_bits_row(img, y)
-    return header + bytes(body) + b"\n"
+    for y in range(y_start, y_start + rows):
+        body += _pack_bits_row(img, y)
+    return header + bytes(body) + b"\n"  # LF after chunk helps some models
 
 def print_image(path: str):
     cfg = load_config()
-    dev = cfg["printer_device"]; simulate = cfg.get("test_mode", False)
-    width_px = int(cfg.get("printer_width_px", 384))
-    max_h = int(cfg.get("max_image_height_px", 4096))
-    chunk_rows = int(cfg.get("raster_chunk_rows", 160))
+    dev     = cfg["printer_device"]
+    simulate= cfg.get("test_mode", False)
+    width_px= int(cfg.get("printer_width_px", 384))
+    max_h   = int(cfg.get("max_image_height_px", 4096))
+    chunk   = int(cfg.get("raster_chunk_rows", 160))
     try:
         img = _to_mono_bitmap(path, target_width_px=width_px, max_height_px=max_h)
+        h = img.size[1]
         chunks: list[bytes] = [INIT, set_codepage_cp437(), ALIGN_CENTER]
-        h = img.size[1]; y = 0
+        y = 0
         while y < h:
-            rows = min(chunk_rows, h - y)
-            chunks.append(_raster_chunk_cmd(img, y, rows)); y += rows
+            rows = min(chunk, h - y)
+            chunks.append(_raster_chunk_cmd(img, y, rows))
+            y += rows
         chunks += [ALIGN_LEFT, b"\n\n", CUT_PARTIAL]
         _write_raw(b"".join(chunks), dev, simulate)
     except Exception as e:

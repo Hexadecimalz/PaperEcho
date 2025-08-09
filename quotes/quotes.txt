@@ -1,4 +1,0 @@
-# One quote per line; lines starting with # are ignored
-Stay focused. Ship it.
-Small steps beat grand plans.
-What gets measured gets improved.
