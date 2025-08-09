@@ -202,13 +202,18 @@ def _quote_block(enabled: bool) -> bytes:
     q = _next_quote()
     if not q:
         return b""
+    cfg = load_config()
+    cols = int(cfg.get("cols", 42))
+
     text = f"\"{q['text']}\""
     by = []
     if q.get("author"): by.append(q["author"])
     if q.get("source"): by.append(q["source"])
     byline = (" — " + ", ".join(by)) if by else ""
-    body = text + ("\n" + byline if byline else "")
-    return encode_escpos(body) + b"\n"
+
+    # Wrap quote and byline by words
+    wrapped = wrap_text(text + ("\n" + byline if byline else ""), cols)
+    return b"".join(encode_escpos(line) + b"\n" for line in wrapped)
 
 def _finalize() -> bytes:
     return b"\n\n" + CUT_PARTIAL
@@ -245,7 +250,7 @@ def print_achievement(text: str, include_quote: bool):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     body = f"* {text.strip()}"
     chunks = [
-        _header_block("ACHIEVEMENT", show_date=True),
+        _header_block("New Achievement", show_date=True),
         _body_block(body, cols),
         _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
         _finalize(),

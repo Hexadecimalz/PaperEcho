@@ -1,6 +1,22 @@
 <!-- templates/index.html -->
 <!DOCTYPE html>
-<html lang="en" x-data="{ formType: null, success: {{ 'true' if success else 'false' }} }">
+<html lang="en"
+      x-data="{
+        formType: null,
+        success: {{ 'true' if success else 'false' }},
+        qOn: false,
+        init() {
+          fetch('/settings/quote').then(r => r.json()).then(d => { this.qOn = !!d.quote_footer_enabled })
+        },
+        toggleQuotes() {
+          this.qOn = !this.qOn;
+          fetch('/settings/quote', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ quote_footer_enabled: this.qOn })
+          });
+        }
+      }">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -63,15 +79,26 @@
       padding: .8rem .9rem; font-size: 1rem; outline: none;
     }
     textarea { min-height: 120px; resize: vertical; }
-    .row { display: flex; gap: .6rem; }
-    .row .btn { flex: 1; }
-
     .actions { display: flex; gap: .6rem; }
     .actions .btn { flex: 1; }
     .muted { color: var(--muted); font-size: .95rem; }
 
     /* Success */
     .success { border-left: 4px solid var(--accent-2); }
+
+    /* Toggle switch */
+    .switch { position: relative; display: inline-block; width: 48px; height: 28px; }
+    .switch input { display: none; }
+    .slider {
+      position: absolute; cursor: pointer; inset: 0;
+      background: #30384a; border-radius: 999px; transition: .2s;
+    }
+    .slider:before {
+      content: ""; position: absolute; height: 22px; width: 22px; left: 3px; top: 3px;
+      background: white; border-radius: 50%; transition: .2s;
+    }
+    .switch input:checked + .slider { background: #00c2a8; }
+    .switch input:checked + .slider:before { transform: translateX(20px); }
   </style>
 </head>
 <body>
@@ -84,6 +111,20 @@
     <strong>✅ Printed!</strong> Your submission was received.
     <div class="actions" style="margin-top:.75rem">
       <button class="btn secondary" @click="formType = null; success = false">Submit another</button>
+    </div>
+  </div>
+
+  <!-- 🌟 Global Quote Toggle -->
+  <div class="card" x-show="!formType && !success" x-cloak>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <strong>Quotes</strong>
+        <div class="muted">Add a random quote to prints (from <code>quotes/quotes.tsv</code>).</div>
+      </div>
+      <label class="switch" title="Toggle quotes on/off">
+        <input type="checkbox" :checked="qOn" @change="toggleQuotes()">
+        <span class="slider"></span>
+      </label>
     </div>
   </div>
 
@@ -127,15 +168,6 @@
       <p class="muted">Large images are auto‑resized to fit the printer width.</p>
     </div>
 
-    <!-- Footer Quote Toggle -->
-    <div class="card" style="padding:.8rem 1rem">
-      <label style="font-weight:500">
-        <input type="checkbox" name="include_quote" />
-        Include motivational quote
-      </label>
-      <p class="muted" style="margin:.35rem 0 0">Pulled randomly from <code>quotes/quotes.txt</code>.</p>
-    </div>
-
     <div class="actions">
       <input type="submit" class="btn primary" value="🖨️ Print">
       <button type="button" class="btn secondary" @click="formType = null">⬅️ Back</button>
@@ -144,11 +176,6 @@
 
   <script>
     // Ensure fields start blank when opening a form
-    document.addEventListener('alpine:init', () => {
-      document.addEventListener('click', (e) => {
-        if (e.target.closest('[@click="formType = \'note\'"]')) return;
-      });
-    });
     window.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('textarea').forEach(t => t.value = '');
     });

@@ -86,15 +86,6 @@ crontab -e
 
 Or use `weather_print_time` for a custom Python scheduler (not enabled by default).
 
----
-
-## 💡 Example Markdown Todo
-
-```
-- [ ] Walk the dog
-- [x] Drink water
-- [ ] Write something inspiring
-```
 
 ---
 
@@ -105,12 +96,7 @@ Or use `weather_print_time` for a custom Python scheduler (not enabled by defaul
 
 ---
 
-## 📷 Screenshots
 
-(Insert mobile UI screenshots here)
+## Credit 
 
----
-
-## 📄 License
-
-MIT
+- Favicon emoji is from [favicon.io](https://favicon.io/emoji-favicons/ballot-box-with-ballot/) via Twemoji, which appears to no longer be in service. 

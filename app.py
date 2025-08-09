@@ -5,6 +5,8 @@ from printer import printer_utils as print_utils
 from pathlib import Path
 import json
 from datetime import datetime
+from flask import jsonify
+
 
 UPLOAD_FOLDER = "static/uploads"
 CONFIG_PATH = Path("config.json")
@@ -14,6 +16,30 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 with open(CONFIG_PATH) as f:
     config = json.load(f)
+
+def _read_cfg():
+    with open(CONFIG_PATH) as f:
+        return json.load(f)
+
+def _write_cfg(data):
+    tmp = CONFIG_PATH.with_suffix(".tmp")
+    with open(tmp, "w") as f:
+        json.dump(data, f, indent=2)
+    os.replace(tmp, CONFIG_PATH)
+
+@app.get("/settings/quote")
+def get_quote_setting():
+    cfg = _read_cfg()
+    return jsonify({"quote_footer_enabled": bool(cfg.get("quote_footer_enabled", False))})
+
+@app.post("/settings/quote")
+def set_quote_setting():
+    body = request.get_json(force=True) or {}
+    val = bool(body.get("quote_footer_enabled", False))
+    cfg = _read_cfg()
+    cfg["quote_footer_enabled"] = val
+    _write_cfg(cfg)
+    return jsonify({"ok": True, "quote_footer_enabled": val})    
 
 
 @app.route("/", methods=["GET"])
