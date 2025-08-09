@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 import os, json, time, unicodedata, re, random
 from typing import Iterable
+import requests  # <-- for OpenWeatherMap
 
 # ---------- Paths / Config ----------
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +26,9 @@ DEFAULTS = {
     "cols": 42,                  # body columns at normal size (common: 42 or 48)
     "printer_width_px": 384,     # image raster width; try 576 if supported
     "max_image_height_px": 4096, # cap super-tall images (0 = no cap)
-    "raster_chunk_rows": 160     # rows per chunk to avoid buffer overruns
+    "raster_chunk_rows": 160,    # rows per chunk to avoid buffer overruns
+    # optional units for weather: "imperial" or "metric"
+    "weather_units": "imperial"
 }
 
 def load_config() -> dict:
@@ -232,6 +235,80 @@ def _print_payload(chunks: Iterable[bytes]):
     simulate = cfg.get("test_mode", False)  # map your key
     _write_raw(b"".join(chunks), dev, simulate)
 
+# ---------- Weather (OpenWeatherMap) ----------
+def _looks_like_coords(loc: str) -> bool:
+    """Return True if string looks like 'lat,lon' numbers."""
+    try:
+        parts = [p.strip() for p in loc.split(",", 1)]
+        if len(parts) != 2: return False
+        float(parts[0]); float(parts[1])
+        return True
+    except Exception:
+        return False
+
+def fetch_weather_json() -> dict:
+    cfg = load_config()
+    key = (cfg.get("weather_api_key") or "").strip()
+    loc = (cfg.get("weather_location") or "").strip()
+    units = (cfg.get("weather_units") or "imperial").strip()  # "imperial" or "metric"
+
+    if not key:
+        raise RuntimeError("weather_api_key missing")
+    if not loc:
+        raise RuntimeError("weather_location missing")
+
+    params = {"appid": key, "units": units}
+    if _looks_like_coords(loc):
+        lat, lon = [p.strip() for p in loc.split(",", 1)]
+        params.update({"lat": lat, "lon": lon})
+    else:
+        params["q"] = loc
+
+    r = requests.get("https://api.openweathermap.org/data/2.5/weather", params=params, timeout=8)
+    r.raise_for_status()
+    return r.json()
+
+def print_weather_report():
+    cfg = load_config()
+    cols = int(cfg.get("cols", 42))
+    units = (cfg.get("weather_units") or "imperial").strip()
+    deg_label = "deg F" if units == "imperial" else "deg C"
+
+    try:
+        j = fetch_weather_json()
+        name = j.get("name") or cfg.get("weather_location")
+        main = j.get("main", {})
+        wx   = (j.get("weather") or [{}])[0]
+        temp = main.get("temp")
+        tmin = main.get("temp_min")
+        tmax = main.get("temp_max")
+        desc = (wx.get("description") or "").title()
+
+        # Round temps if numeric
+        def _rnd(x): 
+            try: return str(int(round(float(x))))
+            except Exception: return str(x)
+
+        # Build lines: Location, Condition, Temp, High, Low (each on its own line)
+        lines = [
+            f"{name}",
+            f"{desc}" if desc else "",
+            f"Temp: {_rnd(temp)} {deg_label}",
+            f"High: {_rnd(tmax)} {deg_label}",
+            f"Low:  {_rnd(tmin)} {deg_label}",
+        ]
+        body = "\n".join([ln for ln in lines if ln.strip()])
+
+    except Exception as e:
+        body = f"Weather error: {e}"
+
+    chunks = [
+        _header_block("WEATHER", show_date=True),
+        _body_block(body, cols),
+        _finalize(),
+    ]
+    _print_payload(chunks)
+
 # ---------- Public text APIs ----------
 def print_note(note: str, include_quote: bool):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
@@ -261,16 +338,6 @@ def print_achievement(text: str, include_quote: bool):
         _header_block("New Achievement", show_date=True),
         _body_block(body, cols),
         _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
-        _finalize(),
-    ]
-    _print_payload(chunks)
-
-def print_weather_report():
-    cfg = load_config(); cols = int(cfg.get("cols", 42))
-    body = "Temp: 72 deg F  High: 88 deg F  Low: 64 deg F\nClear skies"
-    chunks = [
-        _header_block("WEATHER", show_date=True),
-        _body_block(body, cols),
         _finalize(),
     ]
     _print_payload(chunks)

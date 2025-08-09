@@ -14,8 +14,7 @@ A lightweight, mobile-first web interface for printing todo lists, notes, and ph
 
 ## ✨ Features
 
-- 📝 Write and print notes  
-- ✅ Submit markdown-formatted todo lists  
+- 📝 Write and print notes / achievements / todo lists
 - 📷 Upload and print photos  
 - 📅 Auto print daily weather forecast (7am by default)  
 - 💡 Optional motivational quote footer  
@@ -100,7 +99,6 @@ crontab -e
 
 Or use `weather_print_time` for a custom Python scheduler (not enabled by default).
 
-
 ---
 
 ## 🔌 Printer Setup Notes
@@ -109,7 +107,6 @@ Or use `weather_print_time` for a custom Python scheduler (not enabled by defaul
 - Test mode logs to `print_output/test_output.txt`
 
 ---
-
 
 ## Credit 
 

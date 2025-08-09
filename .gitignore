@@ -37,3 +37,6 @@ build/
 # Temporary files
 *.swp
 *.swo
+
+# Ignore quote rotation state
+quotes/.state.json
