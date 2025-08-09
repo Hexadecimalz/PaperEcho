@@ -213,17 +213,14 @@ def _quote_block(enabled: bool) -> bytes:
         by.append(q["source"])
     byline = (" — " + ", ".join(by)) if by else ""
 
-    # Create a light separator
-    separator = ("· " * (cols // 2)).strip()
+    # ASCII-only light separator to avoid '????'
+    separator = ("- " * (cols // 2)).rstrip()
 
-    # Wrap quote and byline by words
     wrapped = wrap_text(text, cols)
     if byline:
         wrapped += [""] + wrap_text(byline, cols)
 
-    # Add spacing + separator before the quote
     output_lines = ["", "", separator, ""] + wrapped
-
     return b"".join(encode_escpos(line) + b"\n" for line in output_lines)
 
 def _finalize() -> bytes:
