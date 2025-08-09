@@ -248,7 +248,7 @@ def print_note(note: str, include_quote: bool):
 
 def print_todo(todo: str, include_quote: bool):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
-    body = f"[ ] {todo.strip()}" if todo and todo.strip() else ""
+    body = f"{todo.strip()}" if todo and todo.strip() else ""
     chunks = [
         _header_block("TODO", show_date=True),
         _body_block(body, cols),
