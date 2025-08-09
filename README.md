@@ -20,15 +20,13 @@ A lightweight, mobile-first web interface for printing todo lists, notes, and ph
 ## 📁 Folder Structure
 
 ```
-thermal_printer_web/
+paperecho/
 ├── app.py
+├── install.sh
+├── favicon.ico
 ├── config.json
 ├── printer/
 │   └── print_utils.py
-├── scripts/
-│   └── install.sh
-├── systemd/
-│   └── thermal_printer_web.service
 ├── static/uploads/
 ├── templates/
 │   └── index.html

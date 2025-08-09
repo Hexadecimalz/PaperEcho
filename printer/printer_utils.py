@@ -1,112 +1,130 @@
-# printer/print_utils.py
-
-import os
-import textwrap
-from datetime import datetime
-import requests
-from escpos.printer import Usb
 from pathlib import Path
+import os
 import json
+from PIL import Image  # pip install pillow
+import time
 
-# Load config from project root
-CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config.json'
-with open(CONFIG_PATH) as f:
-    config = json.load(f)
+# --- config ---
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = PROJECT_ROOT / "config.json"
 
-TEST_OUTPUT_DIR = Path("print_output")
-TEST_OUTPUT_DIR.mkdir(exist_ok=True)
+DEFAULTS = {
+    "printer_device": "/dev/usb/lp0",
+    "simulate": False,
+    "include_quote": False,
+    "weather_time": "07:00",
+}
 
-QUOTES = [
-    "You are capable of amazing things.",
-    "Start where you are. Use what you have. Do what you can.",
-    "Progress, not perfection.",
-    "Dream big. Start small. Act now.",
-    "Small steps every day."
-]
+def load_config():
+    try:
+        with open(CONFIG_PATH) as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+    merged = {**DEFAULTS, **data}
+    # allow env override
+    dev = os.getenv("PRINTER_DEVICE")
+    if dev:
+        merged["printer_device"] = dev
+    return merged
 
-def get_timestamp():
-    return datetime.now().strftime("%a %b %-d %-I:%M %p")
+def _write_raw(payload: bytes, device: str):
+    cfg = load_config()
+    if cfg.get("simulate", False):
+        print("[SIMULATE PRINT] bytes:", payload[:80], f"...({len(payload)} bytes total)", flush=True)
+        return
+    # write raw to device
+    with open(device, "wb", buffering=0) as f:
+        f.write(payload)
 
-def get_printer():
-    if config.get("test_mode", False):
-        return DummyPrinter()
-    else:
-        # Replace with your printer's actual Vendor/Product ID
-        return Usb(0x04b8, 0x0e15, 0, 0x81, 0x03)
+# --- basic esc/pos helpers ---
+LF = b"\n"
+CUT_PARTIAL = b"\x1D\x56\x41\x00"     # GS V A 0
+CENTER = b"\x1B\x61\x01"
+LEFT = b"\x1B\x61\x00"
+BOLD_ON = b"\x1B\x45\x01"
+BOLD_OFF = b"\x1B\x45\x00"
 
-class DummyPrinter:
-    def text(self, msg):
-        with open(TEST_OUTPUT_DIR / "test_output.txt", "a") as f:
-            f.write(msg + "\n")
+def _text_block(lines: list[str]) -> bytes:
+    return ("\n".join(lines) + "\n\n").encode("utf-8")
 
-    def image(self, image_path):
-        with open(TEST_OUTPUT_DIR / "test_output.txt", "a") as f:
-            f.write(f"[IMAGE PRINTED: {image_path}]\n")
+def _print_lines(lines: list[str]):
+    cfg = load_config()
+    dev = cfg["printer_device"]
+    payload = _text_block(lines) + CUT_PARTIAL
+    _write_raw(payload, dev)
 
-    def cut(self):
-        with open(TEST_OUTPUT_DIR / "test_output.txt", "a") as f:
-            f.write("--- CUT ---\n\n")
+def print_note(note: str, include_quote: bool):
+    try:
+        lines = []
+        lines.append((CENTER + BOLD_ON + b"NOTE" + BOLD_OFF + LEFT).decode("latin1"))
+        lines.append(note)
+        if include_quote or load_config().get("include_quote", False):
+            lines.append("")
+            lines.append("“Stay focused. Ship it.”")
+        _print_lines(lines)
+    except Exception as e:
+        print(f"[print_note] ERROR: {e}", flush=True)
 
-def print_note(text, include_quote=False):
-    print(">>> print_note() called")
-    p = get_printer()
-    p.text(get_timestamp() + "\n\n")
-    p.text(textwrap.fill(text, width=32) + "\n\n")
-    if include_quote and config.get("quote_footer_enabled", False):
-        p.text("💡 " + random_quote() + "\n\n")
-    p.cut()
+def print_todo(todo: str, include_quote: bool):
+    try:
+        lines = []
+        lines.append((CENTER + BOLD_ON + b"TODO" + BOLD_OFF + LEFT).decode("latin1"))
+        lines.append(f"[ ] {todo}")
+        if include_quote or load_config().get("include_quote", False):
+            lines.append("")
+            lines.append("“Small steps > grand plans.”")
+        _print_lines(lines)
+    except Exception as e:
+        print(f"[print_todo] ERROR: {e}", flush=True)
 
-def print_todo(markdown_text, include_quote=False):
-    p = get_printer()
-    p.text(get_timestamp() + "\n\n")
-    for line in markdown_text.splitlines():
-        if line.strip().startswith("- [ ]"):
-            task = line.replace("- [ ]", "").strip()
-            p.text(f"☐ {task}\n")
-        elif line.strip().startswith("- [x]"):
-            task = line.replace("- [x]", "").strip()
-            p.text(f"✅ {task}\n")
-    if include_quote and config.get("quote_footer_enabled", False):
-        p.text("\n💡 " + random_quote())
-    p.cut()
+def print_image(path: str):
+    """
+    Super-simple image print: rasterize to ~384px wide (typical 80mm head),
+    convert to mono dither, and send as ASCII art blocks (quick & dirty).
+    For proper graphics, wire up python-escpos' image() later if desired.
+    """
+    try:
+        cfg = load_config()
+        dev = cfg["printer_device"]
 
-def print_image(image_path):
-    p = get_printer()
-    p.text(get_timestamp() + "\n\n")
-    p.image(image_path)
-    p.cut()
+        img = Image.open(path).convert("L")
+        # 80mm printers are ~576 px wide at 203dpi; many safe at 384
+        target_w = 384
+        w, h = img.size
+        new_h = int(h * (target_w / w))
+        img = img.resize((target_w, new_h)).convert("1")  # mono
+
+        # pack bits per row to bytes
+        # ESC * m nL nH d... (older) or GS v 0 (raster). Keep minimal: use rows as text art fallback.
+        # Minimal: translate to blocks just to verify path works
+        lines = ["[PHOTO] " + Path(path).name, ""]
+        # crude preview line count (don’t spam long photos)
+        preview = min(30, img.size[1])
+        for y in range(preview):
+            row = ""
+            for x in range(img.size[0]):
+                row += "@" if img.getpixel((x, y)) == 0 else " "
+            lines.append(row)
+        lines.append("")
+        lines.append("(photo preview)")
+        payload = _text_block(lines) + CUT_PARTIAL
+        _write_raw(payload, dev)
+
+        # TODO: replace with real ESC/POS raster for full image printing later.
+    except Exception as e:
+        print(f"[print_image] ERROR: {e}", flush=True)
 
 def print_weather_report():
-    if not config.get("weather_enabled", False):
-        return
-
-    api_key = config.get("weather_api_key")
-    location = config.get("weather_location")
-    if not api_key or not location:
-        return
-
-    r = requests.get(
-        "https://api.openweathermap.org/data/2.5/weather",
-        params={"q": location, "units": "imperial", "appid": api_key},
-        timeout=10
-    )
-    data = r.json()
-
-    name = data["name"]
-    temp = round(data["main"]["temp"])
-    high = round(data["main"]["temp_max"])
-    low = round(data["main"]["temp_min"])
-    condition = data["weather"][0]["description"].capitalize()
-
-    p = get_printer()
-    p.text(get_timestamp() + "\n\n")
-    p.text(f"📍 Weather for {name}\n")
-    p.text(f"🌡️ {temp}°F (H:{high}° / L:{low}°)\n")
-    p.text(f"☁️ {condition}\n\n")
-    if config.get("quote_footer_enabled", False):
-        p.text("💡 " + random_quote())
-    p.cut()
-
-def random_quote():
-    import random
-    return random.choice(QUOTES)
+    try:
+        # Stub—replace with your actual weather fetch/format
+        ts = time.strftime("%Y-%m-%d %H:%M")
+        lines = [
+            (CENTER + BOLD_ON + b"WEATHER" + BOLD_OFF + LEFT).decode("latin1"),
+            f"As of {ts}",
+            "Temp: 72°F  High: 88°F  Low: 64°F",
+            "Clear skies ☀️",
+        ]
+        _print_lines(lines)
+    except Exception as e:
+        print(f"[print_weather_report] ERROR: {e}", flush=True)
