@@ -53,6 +53,8 @@ After=network.target
 [Service]
 Type=simple
 User=${RUN_USER}
+Group=${RUN_USER}
+SupplementaryGroups=lp
 WorkingDirectory=${PROJECT_DIR}
 ExecStart=${VENV_PY} ${PROJECT_DIR}/app.py
 Environment=FLASK_ENV=production
@@ -69,6 +71,8 @@ UNIT
 
 stop_disable_remove_unit() {
   require_root_ops
+  sudo gpasswd -d "$USER" lp
+  sudo gpasswd -d "$USER" dialout
   if systemctl list-unit-files | grep -q "^${SERVICE_NAME}\b"; then
     sudo systemctl stop "${SERVICE_NAME}" || true
     sudo systemctl disable "${SERVICE_NAME}" || true
@@ -111,6 +115,7 @@ prepare_runtime_dirs() {
 }
 
 enable_and_start() {
+  sudo usermod -aG lp,dialout $USER
   sudo systemctl daemon-reload
   sudo systemctl enable "${SERVICE_NAME}"
   sudo systemctl restart "${SERVICE_NAME}"

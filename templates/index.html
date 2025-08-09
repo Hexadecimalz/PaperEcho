@@ -4,69 +4,154 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Thermal Printer Interface</title>
+  <title>PaperEcho</title>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <style>
-    body { font-family: sans-serif; max-width: 500px; margin: auto; padding: 1rem; }
-    textarea { width: 100%; min-height: 120px; margin-top: 0.5rem; }
-    button, input[type="submit"] {
-      background: black; color: white; padding: 0.75rem 1.2rem;
-      border: none; margin-top: 1rem; cursor: pointer; font-size: 1rem;
+    :root {
+      --bg: #0f1115;
+      --card: #161a22;
+      --text: #e7eaf0;
+      --muted: #a6adbb;
+      --accent: #5b8cff;
+      --accent-2: #00c2a8;
+      --border: #232938;
     }
-    .back-btn { background: #444; margin-left: 0.5rem; }
-    .card { border: 1px solid #ddd; padding: 1rem; margin: 1rem 0; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color: var(--text);
+      background: radial-gradient(1000px 700px at 20% -10%, #1a2040 0%, transparent 50%), var(--bg);
+      max-width: 620px; margin: 0 auto; padding: 2rem 1.25rem;
+    }
+    h1 {
+      font-size: 1.6rem; margin: 0 0 1rem; letter-spacing: .2px;
+      display: flex; align-items: center; gap: .6rem;
+    }
+    h1 .badge {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: white; font-weight: 700; padding: .2rem .55rem; border-radius: .6rem; font-size: .9rem;
+    }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 1rem; margin: 1rem 0; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    .hint { color: var(--muted); font-size: .9rem; }
     [x-cloak] { display: none !important; }
+
+    /* Buttons */
+    .btn {
+      width: 100%; display: block; text-align: center;
+      background: #0b0e14; color: var(--text); border: 1px solid var(--border);
+      padding: .8rem 1.1rem; border-radius: 10px; cursor: pointer; font-size: 1rem;
+      transition: transform .08s ease, background .2s ease, border-color .2s ease;
+      margin: .5rem 0;
+    }
+    .btn:hover { background: #121828; border-color: #2b3347; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary {
+      background: linear-gradient(135deg, #111629, #0c1222);
+      border: 1px solid #263152;
+    }
+    .btn.secondary { background: #151a23; }
+
+    /* Inputs */
+    label { display: block; font-weight: 600; margin: .2rem 0 .4rem; }
+    input[type="text"], textarea, input[type="file"] {
+      width: 100%; background: #0b0f18; color: var(--text);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: .8rem .9rem; font-size: 1rem; outline: none;
+    }
+    textarea { min-height: 120px; resize: vertical; }
+    .row { display: flex; gap: .6rem; }
+    .row .btn { flex: 1; }
+
+    .actions { display: flex; gap: .6rem; }
+    .actions .btn { flex: 1; }
+    .muted { color: var(--muted); font-size: .95rem; }
+
+    /* Success */
+    .success { border-left: 4px solid var(--accent-2); }
   </style>
 </head>
 <body>
 
-  <h1>🖨️ Scribbles</h1>
+  <h1>🖨️ PaperEcho <span class="badge">beta</span></h1>
+  <p class="hint">Print quick notes, todos, achievements, and photos to your thermal printer.</p>
 
   <!-- ✅ Success Message -->
-  <div x-show="success" class="card" x-transition x-cloak>
-    ✅ Submission received and printed!
-    <br>
-    <button @click="formType = null; success = false" class="back-btn">Submit Another</button>
+  <div x-show="success" class="card success" x-transition x-cloak>
+    <strong>✅ Printed!</strong> Your submission was received.
+    <div class="actions" style="margin-top:.75rem">
+      <button class="btn secondary" @click="formType = null; success = false">Submit another</button>
+    </div>
   </div>
 
-  <!-- 🚀 Selection -->
-  <div x-show="!formType && !success" x-transition x-cloak>
-    <p>Select what you’d like to print:</p>
-    <button @click="formType = 'todo'">📋 Todo</button>
-    <button @click="formType = 'note'">📝 Note</button>
-    <button @click="formType = 'photo'">📷 Photo</button>
+  <!-- 🚀 First screen: one button per line -->
+  <div x-show="!formType && !success" x-transition x-cloak class="card">
+    <p style="margin-top:0">What would you like to print?</p>
+    <button class="btn primary"   @click="formType = 'note'">📝 Note</button>
+    <button class="btn primary"   @click="formType = 'todo'">📋 Todo</button>
+    <button class="btn primary"   @click="formType = 'achievement'">🏆 New Achievement</button>
+    <button class="btn primary"   @click="formType = 'photo'">📷 Photo</button>
+    <p class="muted" style="margin:.5rem 0 0">You’ll confirm and print on the next screen.</p>
   </div>
 
-  <!-- 📝 Form -->
+  <!-- 📝 Unified form -->
   <form action="/submit" method="post" enctype="multipart/form-data" x-show="formType" x-transition x-cloak>
     <input type="hidden" name="formType" :value="formType">
 
-    <!-- Todo Form -->
-    <div x-show="formType === 'todo'" class="card" x-cloak>
-      <label>Enter your todo list (Markdown format)</label>
-      <textarea name="todo_text" placeholder="- [ ] Task one\n- [x] Done task"></textarea>
-    </div>
-
-    <!-- Note Form -->
+    <!-- Note -->
     <div x-show="formType === 'note'" class="card" x-cloak>
-      <label>Write a note:</label>
-      <textarea name="note_text" placeholder="Remember to smile today."></textarea>
+      <label>Write a note</label>
+      <textarea name="note_text" placeholder=""></textarea>
     </div>
 
-    <!-- Photo Form -->
+    <!-- Todo (blank by default) -->
+    <div x-show="formType === 'todo'" class="card" x-cloak>
+      <label>Enter your todo list (Markdown optional)</label>
+      <textarea name="todo_text" placeholder=""></textarea>
+      <p class="muted">Examples: <code>- [ ] Task</code>, <code>- [x] Done item</code> (just examples, not prefilled).</p>
+    </div>
+
+    <!-- Achievement -->
+    <div x-show="formType === 'achievement'" class="card" x-cloak>
+      <label>New Achievement</label>
+      <input type="text" name="achievement_text" placeholder="Shipped v1.0 of PaperEcho!" />
+    </div>
+
+    <!-- Photo -->
     <div x-show="formType === 'photo'" class="card" x-cloak>
-      <label>Upload a photo to print:</label>
+      <label>Upload a photo to print</label>
       <input type="file" name="photo_file" accept="image/*" :required="formType === 'photo'" />
+      <p class="muted">Large images are auto‑resized to fit the printer width.</p>
     </div>
 
     <!-- Footer Quote Toggle -->
-    <div style="margin-top: 1rem;">
-      <label><input type="checkbox" name="include_quote" /> Include motivational quote</label>
+    <div class="card" style="padding:.8rem 1rem">
+      <label style="font-weight:500">
+        <input type="checkbox" name="include_quote" />
+        Include motivational quote
+      </label>
+      <p class="muted" style="margin:.35rem 0 0">Pulled randomly from <code>quotes/quotes.txt</code>.</p>
     </div>
 
-    <input type="submit" value="🖨️ Print" />
-    <button type="button" @click="formType = null" class="back-btn">⬅️ Back</button>
+    <div class="actions">
+      <input type="submit" class="btn primary" value="🖨️ Print">
+      <button type="button" class="btn secondary" @click="formType = null">⬅️ Back</button>
+    </div>
   </form>
+
+  <script>
+    // Ensure fields start blank when opening a form
+    document.addEventListener('alpine:init', () => {
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('[@click="formType = \'note\'"]')) return;
+      });
+    });
+    window.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('textarea').forEach(t => t.value = '');
+    });
+  </script>
 
 </body>
 </html>

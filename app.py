@@ -44,6 +44,11 @@ def submit():
         if todo:
             print_utils.print_todo(todo, include_quote)
 
+    elif form_type == "achievement":
+        ach = request.form.get("achievement_text", "").strip()
+        if ach:
+            print_utils.print_achievement(ach, include_quote)
+
     elif form_type == "photo":
         photo = request.files.get("photo_file")
         if photo and photo.filename:
