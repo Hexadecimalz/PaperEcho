@@ -1,4 +1,4 @@
-# 🖨️ Thermal Printer Web Service
+# 🖨️ PaperEcho
 
 A lightweight, mobile-first web interface for printing todo lists, notes, and photos on a thermal receipt printer. Designed for Raspberry Pi or any Linux-based system using [Flask](https://flask.palletsprojects.com/) and [python-escpos](https://python-escpos.readthedocs.io/).
 
