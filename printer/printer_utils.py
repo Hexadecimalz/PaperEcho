@@ -10,17 +10,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = PROJECT_ROOT / "config.json"
 
 DEFAULTS = {
+    # — existing keys you already have —
+    "weather_api_key": "",
+    "weather_location": "Denver,US",
+    "weather_enabled": False,
+    "weather_print_time": "07:00",
+    "quote_footer_enabled": True,
+    "test_mode": False,
     "printer_device": "/dev/usb/lp0",
-    "simulate": False,
-    "include_quote": False,
-    # Text columns at normal size (typical 80mm printers: 42 or 48)
-    "cols": 42,
-    # Raster width in pixels: 384 is very safe; many 80mm heads support 576
-    "printer_width_px": 384,
-    # Cap very tall images; will scale down to fit if exceeded (0 = no cap)
-    "max_image_height_px": 4096,
-    # Rows per raster chunk to avoid printer buffer overruns
-    "raster_chunk_rows": 160
+
+    # — new keys (safe defaults) —
+    "cols": 42,                   # body text columns at normal size (common: 42 or 48)
+    "printer_width_px": 384,      # image raster width; try 576 if your printer supports it
+    "max_image_height_px": 4096,  # cap super-tall images (0 = no cap)
+    "raster_chunk_rows": 160      # rows per raster chunk to avoid buffer overruns
 }
 
 def load_config() -> dict:
@@ -29,7 +32,9 @@ def load_config() -> dict:
             data = json.load(f)
     except Exception:
         data = {}
+    # merge without renaming old keys
     merged = {**DEFAULTS, **data}
+    # env override for device if set
     if os.getenv("PRINTER_DEVICE"):
         merged["printer_device"] = os.getenv("PRINTER_DEVICE")
     return merged
@@ -96,7 +101,7 @@ def wrap_text(text: str, cols: int) -> list[str]:
             # word
             wlen = len(w)
             if not cur.strip():
-                cur = w if wlen <= cols else w  # long words will overflow; we don't hyphenate
+                cur = w if wlen <= cols else w  # long words overflow gracefully (no hyphenation)
             elif len(cur) + wlen <= cols:
                 cur += w
             else:
@@ -161,7 +166,6 @@ def _quote_block(enabled: bool, quote_text: str | None = None) -> bytes:
     if not enabled:
         return b""
     q = quote_text or '"Small steps beat grand plans."'
-    # Ensure ASCII-safe
     q = sanitize_text(q)
     return b"\n" + encode_escpos(q) + b"\n"
 
@@ -171,7 +175,7 @@ def _finalize() -> bytes:
 def _print_payload(chunks: Iterable[bytes]):
     cfg = load_config()
     dev = cfg["printer_device"]
-    simulate = cfg.get("simulate", False)
+    simulate = cfg.get("test_mode", False)  # map your existing key
     payload = b"".join(chunks)
     _write_raw(payload, dev, simulate)
 
@@ -182,7 +186,7 @@ def print_note(note: str, include_quote: bool):
     chunks = [
         _header_block("NOTE", big=True),
         _body_block(note, cols),
-        _quote_block(include_quote or cfg.get("include_quote", False)),
+        _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
         _finalize(),
     ]
     _print_payload(chunks)
@@ -194,15 +198,15 @@ def print_todo(todo: str, include_quote: bool):
     chunks = [
         _header_block("TODO", big=True),
         _body_block(body, cols),
-        _quote_block(include_quote or cfg.get("include_quote", False)),
+        _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
         _finalize(),
     ]
     _print_payload(chunks)
 
 def print_weather_report():
+    # Stub formatting (ties into your future weather fetch)
     cfg = load_config()
     cols = int(cfg.get("cols", 42))
-    # Replace degree symbol to avoid code page surprises
     body = "Temp: 72 deg F  High: 88 deg F  Low: 64 deg F\nClear skies"
     chunks = [
         _header_block("WEATHER", big=True),
@@ -221,12 +225,14 @@ def _to_mono_bitmap(path: str, target_width_px: int, max_height_px: int) -> "Ima
 
     img = Image.open(path)
     img = ImageOps.exif_transpose(img)  # respect EXIF orientation
+
     # Scale to target width (maintain aspect)
     w0, h0 = img.size
     scale = target_width_px / float(w0)
     new_w = target_width_px
     new_h = max(1, int(round(h0 * scale)))
     img = img.resize((new_w, new_h))
+
     # Cap height if configured
     if max_height_px and new_h > max_height_px:
         scale2 = max_height_px / float(new_h)
@@ -240,8 +246,9 @@ def _to_mono_bitmap(path: str, target_width_px: int, max_height_px: int) -> "Ima
             xoff = (target_width_px - new_w) // 2
             canvas.paste(img, (xoff, 0))
             img = canvas
+
     # Grayscale -> 1-bit (dither)
-    img = img.convert("1")  # Pillow uses Floyd–Steinberg dithering by default here
+    img = img.convert("1")  # Pillow uses Floyd–Steinberg dithering here
     return img
 
 def _pack_bits_row(img, y: int) -> bytes:
@@ -299,7 +306,7 @@ def print_image(path: str):
     """
     cfg = load_config()
     dev = cfg["printer_device"]
-    simulate = cfg.get("simulate", False)
+    simulate = cfg.get("test_mode", False)
     width_px = int(cfg.get("printer_width_px", 384))
     max_h = int(cfg.get("max_image_height_px", 4096))
     chunk_rows = int(cfg.get("raster_chunk_rows", 160))
