@@ -1,5 +1,13 @@
 # 🖨️ PaperEcho
 
+This project was definitely inspired by [ProjectScribe](https://github.com/UrbanCircles/scribe/tree/main). I taken with the idea and presentation of the project. However, for me the project seemed way too complicated to just print something out. The wiring diagrams didn't inspire confidence in what I've done before. I liked the 3D printed design for the printer, but ultimately I wasn't going to do that. I just wanted to mimic the setup in my own way. I already had a Raspberry Pi, which I know I could connect via USB to a theral printer. 
+
+I also wanted something simple but with some additional functionality that Project Scribe's author hasn't provided. I used AI to generate all of the code and create something I really like for minimal effort. The idea of printing certain things and having this available via localhost on my phone works great for me. 
+
+I ended up using my Pi 3 and this [Nucoun VCP-8370 printer](https://www.amazon.com/dp/B0CSDKHKT7). I think the total cost would likely be significantly more than Project Scribe's if I had to buy everything new, but I also like the flexibility of a lot more storage space and flexibility. There are trade offs to the minimalist design but I'm pretty happy with the final result.
+
+## About 
+
 A lightweight, mobile-first web interface for printing todo lists, notes, and photos on a thermal receipt printer. Designed for Raspberry Pi or any Linux-based system using [Flask](https://flask.palletsprojects.com/) and [python-escpos](https://python-escpos.readthedocs.io/).
 
 ---
@@ -28,6 +36,7 @@ paperecho/
 ├── printer/
 │   └── print_utils.py
 ├── static/uploads/
+├── static/images/favicon.ico # favicon for webpage
 ├── templates/
 │   └── index.html
 └── print_output/           # (Created if test_mode=true)
@@ -40,8 +49,8 @@ paperecho/
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/YOURNAME/thermal_printer_web.git
-cd thermal_printer_web
+git clone https://github.com/YOURNAME/paperecho.git
+cd paperecho
 bash scripts/install.sh
 ```
 
@@ -52,11 +61,16 @@ Edit `config.json`:
 ```json
 {
   "weather_api_key": "YOUR_API_KEY",
-  "weather_location": "Salt Lake City,US",
-  "weather_enabled": true,
+  "weather_location": "Denver,US",
+  "weather_enabled": false,
   "weather_print_time": "07:00",
   "quote_footer_enabled": true,
-  "test_mode": true
+  "test_mode": false,
+  "printer_device": "/dev/usb/lp0",
+  "cols": 42,
+  "printer_width_px": 384,
+  "max_image_height_px": 4096,
+  "raster_chunk_rows": 160
 }
 ```
 
@@ -65,7 +79,7 @@ Edit `config.json`:
 ### 3. Start the Service
 
 ```bash
-sudo systemctl start thermal_printer_web
+sudo systemctl start paperecho
 ```
 
 App runs at: [http://localhost:5000](http://localhost:5000)

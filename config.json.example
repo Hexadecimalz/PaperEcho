@@ -1,0 +1,13 @@
+{
+  "weather_api_key": "YOUR_API_KEY",
+  "weather_location": "Denver,US",
+  "weather_enabled": false,
+  "weather_print_time": "07:00",
+  "quote_footer_enabled": true,
+  "test_mode": false,
+  "printer_device": "/dev/usb/lp0",
+  "cols": 42,
+  "printer_width_px": 384,
+  "max_image_height_px": 4096,
+  "raster_chunk_rows": 160
+}

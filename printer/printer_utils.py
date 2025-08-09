@@ -207,13 +207,24 @@ def _quote_block(enabled: bool) -> bytes:
 
     text = f"\"{q['text']}\""
     by = []
-    if q.get("author"): by.append(q["author"])
-    if q.get("source"): by.append(q["source"])
+    if q.get("author"):
+        by.append(q["author"])
+    if q.get("source"):
+        by.append(q["source"])
     byline = (" — " + ", ".join(by)) if by else ""
 
+    # Create a light separator
+    separator = ("· " * (cols // 2)).strip()
+
     # Wrap quote and byline by words
-    wrapped = wrap_text(text + ("\n" + byline if byline else ""), cols)
-    return b"".join(encode_escpos(line) + b"\n" for line in wrapped)
+    wrapped = wrap_text(text, cols)
+    if byline:
+        wrapped += [""] + wrap_text(byline, cols)
+
+    # Add spacing + separator before the quote
+    output_lines = ["", "", separator, ""] + wrapped
+
+    return b"".join(encode_escpos(line) + b"\n" for line in output_lines)
 
 def _finalize() -> bytes:
     return b"\n\n" + CUT_PARTIAL
