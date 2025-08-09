@@ -132,11 +132,15 @@ def _write_raw(payload: bytes, device: str, simulate: bool):
         f.write(payload)
 
 def _header_block(title: str | None = None, big: bool = True) -> bytes:
-    # Date line (centered)
-    parts: list[bytes] = [INIT, set_codepage_cp437(), ALIGN_CENTER, char_size(1, 1)]
+    parts: list[bytes] = [INIT, set_codepage_cp437(), ALIGN_CENTER]
+
+    # Big date
+    parts.append(BOLD_ON + char_size(2, 2))
     parts.append(encode_escpos(date_line()))
-    parts.append(b"\n")
+    parts.append(BOLD_OFF + char_size(1, 1) + b"\n")
+
     if title:
+        # Keep title big too (or set big=False if you want normal)
         if big:
             parts.append(BOLD_ON + char_size(2, 2))
         else:
@@ -144,7 +148,8 @@ def _header_block(title: str | None = None, big: bool = True) -> bytes:
         parts.append(encode_escpos(title))
         parts.append(BOLD_OFF + char_size(1, 1))
         parts.append(b"\n")
-    # spacer
+
+    # Spacer and left align for the body
     parts.extend([b"\n", ALIGN_LEFT])
     return b"".join(parts)
 
@@ -192,17 +197,95 @@ def print_todo(todo: str, include_quote: bool):
     ]
     _print_payload(chunks)
 
+def _to_mono_bitmap(path: str, target_width_px: int = 384):
+    """
+    Open image, convert to 1-bit, and scale to target width.
+    Returns (w_px, h_px, mono_image).
+    """
+    from PIL import Image  # pillow
+
+    img = Image.open(path).convert("L")
+    # Typical 80mm heads are 576 px wide; 384 works for almost all
+    w0, h0 = img.size
+    new_h = max(1, int(h0 * (target_width_px / w0)))
+    img = img.resize((target_width_px, new_h)).convert("1")  # Floyd–Steinberg dither default
+    return img.size[0], img.size[1], img
+
+def _pack_bits_row(img, y: int) -> bytes:
+    """
+    Pack one row of a 1-bit PIL image into bytes, MSB first per byte.
+    """
+    w, _ = img.size
+    row = 0
+    out = bytearray()
+    byte = 0
+    bitpos = 7
+    for x in range(w):
+        # PIL 1-bit pixels are 0 or 255; treat 0 as black "dot on"
+        pixel_on = (img.getpixel((x, y)) == 0)
+        if pixel_on:
+            byte |= (1 << bitpos)
+        bitpos -= 1
+        if bitpos < 0:
+            out.append(byte)
+            byte = 0
+            bitpos = 7
+            row += 1
+    if bitpos != 7:
+        out.append(byte)
+    return bytes(out)
+
+def _raster_cmd(img) -> bytes:
+    """
+    Build GS v 0 raster bit-image command for the whole image.
+    Some printers like chunking; we’ll send the whole thing (works on most).
+    """
+    w, h = img.size
+    row_bytes = (w + 7) // 8
+
+    # Header: GS v 0 m xL xH yL yH  (m=0 normal)
+    xL = row_bytes & 0xFF
+    xH = (row_bytes >> 8) & 0xFF
+    yL = h & 0xFF
+    yH = (h >> 8) & 0xFF
+
+    header = GS + b"v0" + b"\x00" + bytes([xL, xH, yL, yH])
+
+    # Data: rows packed left-to-right, top-to-bottom
+    body = bytearray()
+    for y in range(h):
+        body += _pack_bits_row(img, y)
+
+    # Some printers prefer a newline after raster; harmless on others
+    return header + bytes(body) + b"\n"    
+
 def print_image(path: str):
-    # Keep simple for now: just prints a header + filename; full raster later.
+    """
+    Proper ESC/POS raster print using GS v 0.
+    Scales to 384 px width, centers it, prints, then cuts.
+    """
     cfg = load_config()
-    cols = int(cfg.get("cols", 42))
-    body = f"[PHOTO] {Path(path).name}\n(Preview disabled in this build)"
-    chunks = [
-        _header_block("PHOTO", big=True),
-        _body_block(body, cols),
-        _finalize(),
-    ]
-    _print_payload(chunks)
+    dev = cfg["printer_device"]
+    simulate = cfg.get("simulate", False)
+
+    try:
+        # Prep image
+        w, h, mono = _to_mono_bitmap(path, target_width_px=384)
+
+        # Build payload
+        chunks = [
+            INIT,
+            ALIGN_CENTER,  # center the image
+            _raster_cmd(mono),
+            ALIGN_LEFT,
+            b"\n\n",
+            CUT_PARTIAL,
+        ]
+        payload = b"".join(chunks)
+
+        _write_raw(payload, dev, simulate)
+    except Exception as e:
+        print(f"[print_image] ERROR: {e}", flush=True)
 
 def print_weather_report():
     cfg = load_config()
