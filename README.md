@@ -7,9 +7,9 @@ Inspired by the charm of physical printouts, PaperEcho makes your printer a litt
 
 This project was inspired by [ProjectScribe](https://github.com/UrbanCircles/scribe/tree/main). I was taken with the idea and presentation of the project. However, for me the project seemed way too complicated to just print something out. I liked the 3D printed design for the printer, but ultimately I wasn't going to do that. I just wanted to mimic the setup in my own way. I already had a Raspberry Pi, which I knew I could connect via USB to a thermal printer. 
 
-I also wanted something simple but with some additional functionality that Project Scribe's author hasn't provided. I used AI to generate all of the code and create something I really like for minimal effort. The idea of printing certain things and having this available via localhost on my phone works great for me. 
+I also wanted something simple but with additional functionality that Project Scribe's author hasn't provided. I used AI to generate all of the code and create something I really like for minimal effort. The idea of printing certain things and having this available via localhost on my phone works great for me. 
 
-I ended up using my Pi 3 and this [Nucoun VCP-8370 printer](https://www.amazon.com/dp/B0CSDKHKT7). I think the total cost would likely be significantly more than Project Scribe's if I had to buy everything new, but I also like the flexibility of a lot more storage space and flexibility. There are trade offs to the minimalist design but I'm pretty happy with the final result.
+I ended up using my Pi 3 and this [Nucoun VCP-8370 printer](https://www.amazon.com/dp/B0CSDKHKT7). I think the total cost would likely be significantly more than Project Scribe's if I had to buy everything new.
 
 ## 📦 Features
 
