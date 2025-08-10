@@ -89,6 +89,11 @@ Example:
 
 PaperEcho uses the [OpenWeatherMap API](https://openweathermap.org/api).
 
+TODO: 
+
+ - This really gets triggered via a cron job, so this needs to be updated in the config.
+ - Lat / Long may be better for this as I've noticed the weather report so far feels slightly wrong, the temperatures have been too low so far.
+
 **Manual weather check via `curl`:**
 ```bash
 curl "https://api.openweathermap.org/data/2.5/weather?q=Denver,US&appid=YOUR_API_KEY&units=imperial"
@@ -129,7 +134,7 @@ PaperEcho/
 
 ## Credits
 
-- **[Project Scribe](https://github.com/nujabes403/scribe)** – inspiration for a minimal, beautiful thermal printer interface.
+- **[ProjectScribe](https://github.com/UrbanCircles/scribe/tree/main)** – inspiration for a minimal, beautiful thermal printer interface.
 - Favicon emoji is from [favicon.io](https://favicon.io/emoji-favicons/ballot-box-with-ballot/) via Twemoji, which appears to no longer be in service. 
 - ESC/POS printing powered by the [`python-escpos`](https://github.com/python-escpos/python-escpos) library.
 - Quotes sourced from public domain works including:
