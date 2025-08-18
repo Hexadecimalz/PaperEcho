@@ -1,7 +1,6 @@
 # PaperEcho
 
-A simple but flexible thermal printer web service for quick printing of notes, todos, achievements, photos, and more — straight from your browser.  
-Inspired by the charm of physical printouts, PaperEcho makes your printer a little creativity companion.
+A simple but flexible thermal printer web service for quick printing of notes, todos, achievements, photos, and more — straight from your browser. Inspired by the charm of physical printouts, PaperEcho makes your printer a little creativity companion.
 
 ## About 
 
