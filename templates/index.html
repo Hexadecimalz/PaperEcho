@@ -139,7 +139,19 @@
   </div>
 
   <!-- 📝 Unified form -->
-  <form action="/submit" method="post" enctype="multipart/form-data" x-show="formType" x-transition x-cloak>
+  <form action="/submit" method="post" enctype="multipart/form-data" x-show="formType" x-transition x-cloak
+      x-data="{
+        todoItems: Array(3).fill(''),
+        addTodo() { this.todoItems.push('') },
+        removeTodo(idx) { if (this.todoItems.length > 3) this.todoItems.splice(idx, 1) },
+        prepareTodos() {
+          // Combine todos with - [ ] prefix
+          document.querySelector('input[name=todo_text]').value =
+            this.todoItems.filter(t => t.trim()).map(t => `- [ ] ${t}`).join('\n');
+        }
+      }"
+      @submit="formType === 'todo' && prepareTodos()"
+>
     <input type="hidden" name="formType" :value="formType">
 
     <!-- Note -->
@@ -148,11 +160,19 @@
       <textarea name="note_text" placeholder=""></textarea>
     </div>
 
-    <!-- Todo (blank by default) -->
+    <!-- Todo (dynamic boxes) -->
     <div x-show="formType === 'todo'" class="card" x-cloak>
-      <label>Enter your todo list (Markdown optional)</label>
-      <textarea name="todo_text" placeholder=""></textarea>
-      <p class="muted">Examples: <code>- [ ] Task</code>, <code>- [x] Done item</code> (just examples, not prefilled).</p>
+      <label>Enter your todo list</label>
+      <template x-for="(item, idx) in todoItems" :key="idx">
+        <div style="display:flex; align-items:center; gap:.5rem; margin-bottom:.5rem;">
+          <span style="color:var(--muted); font-size:1.1rem;">- [ ]</span>
+          <input type="text" x-model="todoItems[idx]" placeholder="Todo item..." style="flex:1;" />
+          <button type="button" class="btn secondary" style="width:2.2rem; padding:0;" @click="removeTodo(idx)" x-show="todoItems.length > 3">−</button>
+          <button type="button" class="btn secondary" style="width:2.2rem; padding:0;" @click="addTodo()" x-show="idx === todoItems.length - 1">+</button>
+        </div>
+      </template>
+      <input type="hidden" name="todo_text" value="">
+      <p class="muted">Each item will be printed as <code>- [ ] Task</code>. Minimum 3 items.</p>
     </div>
 
     <!-- Achievement -->
