@@ -355,10 +355,39 @@ def print_separator_and_footer(footer_text: str):
     print_centered(footer_text)
 
 def print_image_centered(image_path: str):
-    # ...existing code for centering and printing image...
+    cfg = load_config()
+    dev = cfg["printer_device"]
+    simulate = cfg.get("test_mode", False)
+    width_px = int(cfg.get("printer_width_px", 384))
+    max_h = 200  # Separator image should be short
+    chunk = int(cfg.get("raster_chunk_rows", 160))
+    try:
+        img = _to_mono_bitmap(image_path, target_width_px=width_px, max_height_px=max_h)
+        h = img.size[1]
+        chunks: list[bytes] = [INIT, set_codepage_cp437(), ALIGN_CENTER]
+        y = 0
+        while y < h:
+            rows = min(chunk, h - y)
+            chunks.append(_raster_chunk_cmd(img, y, rows))
+            y += rows
+        chunks += [ALIGN_LEFT, b"\n"]
+        _write_raw(b"".join(chunks), dev, simulate)
+    except Exception as e:
+        print(f"[print_image_centered] ERROR: {e}", flush=True)
 
 def print_centered(text: str):
-    # ...existing code for centering and printing text...
+    cfg = load_config()
+    cols = int(cfg.get("cols", 42))
+    dev = cfg["printer_device"]
+    simulate = cfg.get("test_mode", False)
+    # Use wrap_text to wrap and center each line
+    lines = wrap_text(text, cols)
+    centered_lines = []
+    for line in lines:
+        pad = max(0, (cols - len(line)) // 2)
+        centered_lines.append(" " * pad + line)
+    payload = b"".join(encode_escpos(line) + b"\n" for line in centered_lines) + b"\n"
+    _write_raw(INIT + set_codepage_cp437() + ALIGN_CENTER + payload + ALIGN_LEFT, dev, simulate)
 
 # ---------- Image printing (ESC/POS raster, chunked) ----------
 def _to_mono_bitmap(path: str, target_width_px: int, max_height_px: int) -> "Image.Image":
