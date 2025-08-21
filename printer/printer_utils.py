@@ -310,7 +310,7 @@ def print_weather_report():
     _print_payload(chunks)
 
 # ---------- Public text APIs ----------
-def print_note(note: str, include_quote: bool):
+def print_note(note: str, include_quote: bool, footer_text: str = None):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     chunks = [
         _header_block("NOTE", show_date=True),
@@ -319,8 +319,10 @@ def print_note(note: str, include_quote: bool):
         _finalize(),
     ]
     _print_payload(chunks)
+    if include_quote and footer_text:
+        print_separator_and_footer(footer_text)
 
-def print_todo(todo: str, include_quote: bool):
+def print_todo(todo: str, include_quote: bool, footer_text: str = None):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     body = f"{todo.strip()}" if todo and todo.strip() else ""
     chunks = [
@@ -330,8 +332,10 @@ def print_todo(todo: str, include_quote: bool):
         _finalize(),
     ]
     _print_payload(chunks)
+    if include_quote and footer_text:
+        print_separator_and_footer(footer_text)
 
-def print_achievement(text: str, include_quote: bool):
+def print_achievement(text: str, include_quote: bool, footer_text: str = None):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     body = f"* {text.strip()}"
     chunks = [
@@ -341,6 +345,20 @@ def print_achievement(text: str, include_quote: bool):
         _finalize(),
     ]
     _print_payload(chunks)
+    if include_quote and footer_text:
+        print_separator_and_footer(footer_text)
+
+def print_separator_and_footer(footer_text: str):
+    # Print separator image centered
+    print_image_centered('./static/images/separator.png')
+    # Print footer text centered (same as title centering logic)
+    print_centered(footer_text)
+
+def print_image_centered(image_path: str):
+    # ...existing code for centering and printing image...
+
+def print_centered(text: str):
+    # ...existing code for centering and printing text...
 
 # ---------- Image printing (ESC/POS raster, chunked) ----------
 def _to_mono_bitmap(path: str, target_width_px: int, max_height_px: int) -> "Image.Image":
