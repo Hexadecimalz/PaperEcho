@@ -199,7 +199,7 @@ def _header_block(title: str | None = None, show_date: bool = True) -> bytes:
 def _body_block(text: str, cols: int) -> bytes:
     return b"".join(encode_escpos(line) + b"\n" for line in wrap_text(text, cols))
 
-def _quote_block(enabled: bool) -> bytes:
+def _quote_block(enabled: bool, footer_text: str = None) -> bytes:
     if not enabled:
         return b""
     q = _next_quote()
@@ -216,7 +216,6 @@ def _quote_block(enabled: bool) -> bytes:
         by.append(q["source"])
     byline = (" — " + ", ".join(by)) if by else ""
 
-    # ASCII-only light separator to avoid '????'
     separator = ("- " * (cols // 2)).rstrip()
 
     wrapped = wrap_text(text, cols)
@@ -224,7 +223,11 @@ def _quote_block(enabled: bool) -> bytes:
         wrapped += [""] + wrap_text(byline, cols)
 
     output_lines = ["", "", separator, ""] + wrapped
-    return b"".join(encode_escpos(line) + b"\n" for line in output_lines)
+    result = b"".join(encode_escpos(line) + b"\n" for line in output_lines)
+    # Print separator image and footer if footer_text is present
+    if footer_text:
+        print_separator_and_footer(footer_text)
+    return result
 
 def _finalize() -> bytes:
     return b"\n\n" + CUT_PARTIAL
@@ -315,12 +318,10 @@ def print_note(note: str, include_quote: bool, footer_text: str = None):
     chunks = [
         _header_block("NOTE", show_date=True),
         _body_block(note, cols),
-        _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
+        _quote_block(include_quote or cfg.get("quote_footer_enabled", False), footer_text),
         _finalize(),
     ]
     _print_payload(chunks)
-    if include_quote and footer_text:
-        print_separator_and_footer(footer_text)
 
 def print_todo(todo: str, include_quote: bool, footer_text: str = None):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
@@ -328,12 +329,10 @@ def print_todo(todo: str, include_quote: bool, footer_text: str = None):
     chunks = [
         _header_block("TODO", show_date=True),
         _body_block(body, cols),
-        _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
+        _quote_block(include_quote or cfg.get("quote_footer_enabled", False), footer_text),
         _finalize(),
     ]
     _print_payload(chunks)
-    if include_quote and footer_text:
-        print_separator_and_footer(footer_text)
 
 def print_achievement(text: str, include_quote: bool, footer_text: str = None):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
@@ -341,12 +340,10 @@ def print_achievement(text: str, include_quote: bool, footer_text: str = None):
     chunks = [
         _header_block("New Achievement", show_date=True),
         _body_block(body, cols),
-        _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
+        _quote_block(include_quote or cfg.get("quote_footer_enabled", False), footer_text),
         _finalize(),
     ]
     _print_payload(chunks)
-    if include_quote and footer_text:
-        print_separator_and_footer(footer_text)
 
 def print_separator_and_footer(footer_text: str):
     # Print separator image centered
@@ -456,6 +453,9 @@ def print_image(path: str):
             chunks.append(_raster_chunk_cmd(img, y, rows))
             y += rows
         chunks += [ALIGN_LEFT, b"\n\n", CUT_PARTIAL]
+        _write_raw(b"".join(chunks), dev, simulate)
+    except Exception as e:
+        print(f"[print_image] ERROR: {e}", flush=True)
         _write_raw(b"".join(chunks), dev, simulate)
     except Exception as e:
         print(f"[print_image] ERROR: {e}", flush=True)
