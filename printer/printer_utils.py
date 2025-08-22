@@ -17,8 +17,6 @@ DEFAULTS = {
     # existing keys you already use
     "weather_api_key": "",
     "weather_location": "Denver,US",
-    "weather_enabled": False,
-    "weather_print_time": "07:00",
     "quote_footer_enabled": True,
     "test_mode": False,
     "printer_device": "/dev/usb/lp0",
@@ -457,5 +455,7 @@ def print_image(path: str):
         print(f"[print_image] ERROR: {e}", flush=True)
         _write_raw(b"".join(chunks), dev, simulate)
     except Exception as e:
+        print(f"[print_image] ERROR: {e}", flush=True)
+        print(f"[print_image] ERROR: {e}", flush=True)
         print(f"[print_image] ERROR: {e}", flush=True)
         print(f"[print_image] ERROR: {e}", flush=True)

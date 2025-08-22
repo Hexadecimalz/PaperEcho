@@ -8,7 +8,7 @@ This project was inspired by [ProjectScribe](https://github.com/UrbanCircles/scr
 
 I also wanted something simple but with additional functionality that Project Scribe's author hasn't provided. I used AI to generate all of the code and create something I really like for minimal effort. The idea of printing certain things and having this available via localhost on my phone works great for me. 
 
-I ended up using my Pi 3 and this [Nucoun VCP-8370 printer](https://www.amazon.com/dp/B0CSDKHKT7). I think the total cost would likely be significantly more than Project Scribe's if I had to buy everything new.
+I ended up using my Pi 3 and this [Nucoun VCP-8370 printer](https://www.amazon.com/dp/B0CSDKHKT7). I think the total cost would likely be significantly more than Project Scribe's if I had to buy everything new. If I had to do it again I'd look for a quieter printer.
 
 ## 📦 Features
 
@@ -70,17 +70,18 @@ Example:
 {
   "weather_api_key": "YOUR_API_KEY",
   "weather_location": "Denver,US",
-  "weather_enabled": false,
-  "weather_print_time": "07:00",
   "quote_footer_enabled": true,
   "test_mode": false,
   "printer_device": "/dev/usb/lp0",
   "cols": 42,
   "printer_width_px": 384,
   "max_image_height_px": 4096,
-  "raster_chunk_rows": 160
+  "raster_chunk_rows": 160,
+  "footer": "Printed on BPA Free Paper"
 }
 ```
+
+The footer option prints an optional footer message. This really just makes the receipts a little longer for me, since they were a little smalle in some cases. It prints an image located at `./static/images/separator.png` and then the footer message. If the footer option is not in the `config.json`, then no message will be printed. I also wanted to indicate that the receipted was BPA free, as I see some instances where I would give these attached to gift cards or something like that. 
 
 ---
 
@@ -88,10 +89,9 @@ Example:
 
 PaperEcho uses the [OpenWeatherMap API](https://openweathermap.org/api).
 
-TODO: 
+**Automatically print your weather via a crontab like this:** 
 
- - This really gets triggered via a cron job, so this needs to be updated in the config.
- - Lat / Long may be better for this as I've noticed the weather report so far feels slightly wrong, the temperatures have been too low so far.
+`0 7 * * * curl -s http://localhost:5000/trigger/weather > /dev/null`
 
 **Manual weather check via `curl`:**
 ```bash
@@ -141,3 +141,11 @@ PaperEcho/
   - Stoic philosophers (Marcus Aurelius, Seneca, Epictetus)
   - Fernando Pessoa
 - Word-wrap and image rasterization tuned for common 80mm thermal printers.
+
+
+## TODO
+
+ - Weather feature is lacking accuracy. Current temp seems fine, but high and low seems drastically incorrect. 
+ - I want a custom title option. 
+ - I want a better separator image.
+ - Photo + Note 
