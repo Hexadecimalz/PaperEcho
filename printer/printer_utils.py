@@ -224,9 +224,6 @@ def _quote_block(enabled: bool, footer_text: str = None) -> bytes:
 
     output_lines = ["", "", separator, ""] + wrapped
     result = b"".join(encode_escpos(line) + b"\n" for line in output_lines)
-    # Print separator image and footer if footer_text is present
-    if footer_text:
-        print_separator_and_footer(footer_text)
     return result
 
 def _finalize() -> bytes:
@@ -318,9 +315,11 @@ def print_note(note: str, include_quote: bool, footer_text: str = None):
     chunks = [
         _header_block("NOTE", show_date=True),
         _body_block(note, cols),
-        _quote_block(include_quote or cfg.get("quote_footer_enabled", False), footer_text),
-        _finalize(),
+        _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
     ]
+    if (include_quote or cfg.get("quote_footer_enabled", False)) and footer_text:
+        chunks.append(separator_and_footer_bytes(footer_text))
+    chunks.append(_finalize())
     _print_payload(chunks)
 
 def print_todo(todo: str, include_quote: bool, footer_text: str = None):
@@ -329,9 +328,11 @@ def print_todo(todo: str, include_quote: bool, footer_text: str = None):
     chunks = [
         _header_block("TODO", show_date=True),
         _body_block(body, cols),
-        _quote_block(include_quote or cfg.get("quote_footer_enabled", False), footer_text),
-        _finalize(),
+        _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
     ]
+    if (include_quote or cfg.get("quote_footer_enabled", False)) and footer_text:
+        chunks.append(separator_and_footer_bytes(footer_text))
+    chunks.append(_finalize())
     _print_payload(chunks)
 
 def print_achievement(text: str, include_quote: bool, footer_text: str = None):
@@ -340,25 +341,24 @@ def print_achievement(text: str, include_quote: bool, footer_text: str = None):
     chunks = [
         _header_block("New Achievement", show_date=True),
         _body_block(body, cols),
-        _quote_block(include_quote or cfg.get("quote_footer_enabled", False), footer_text),
-        _finalize(),
+        _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
     ]
+    if (include_quote or cfg.get("quote_footer_enabled", False)) and footer_text:
+        chunks.append(separator_and_footer_bytes(footer_text))
+    chunks.append(_finalize())
     _print_payload(chunks)
 
-def print_separator_and_footer(footer_text: str):
-    # Print separator image centered
-    print_image_centered('./static/images/separator.png')
-    # Print footer text centered (same as title centering logic)
-    print_centered(footer_text)
+def separator_and_footer_bytes(footer_text: str) -> bytes:
+    # Return bytes for separator image and centered footer text
+    return print_image_centered_bytes('./static/images/separator.png') + print_centered_bytes(footer_text)
 
-def print_image_centered(image_path: str):
+def print_image_centered_bytes(image_path: str) -> bytes:
     cfg = load_config()
-    dev = cfg["printer_device"]
-    simulate = cfg.get("test_mode", False)
     width_px = int(cfg.get("printer_width_px", 384))
     max_h = 200  # Separator image should be short
     chunk = int(cfg.get("raster_chunk_rows", 160))
     try:
+        from PIL import Image, ImageOps
         img = _to_mono_bitmap(image_path, target_width_px=width_px, max_height_px=max_h)
         h = img.size[1]
         chunks: list[bytes] = [INIT, set_codepage_cp437(), ALIGN_CENTER]
@@ -368,15 +368,14 @@ def print_image_centered(image_path: str):
             chunks.append(_raster_chunk_cmd(img, y, rows))
             y += rows
         chunks += [ALIGN_LEFT, b"\n"]
-        _write_raw(b"".join(chunks), dev, simulate)
+        return b"".join(chunks)
     except Exception as e:
-        print(f"[print_image_centered] ERROR: {e}", flush=True)
+        print(f"[print_image_centered_bytes] ERROR: {e}", flush=True)
+        return b""
 
-def print_centered(text: str):
+def print_centered_bytes(text: str) -> bytes:
     cfg = load_config()
     cols = int(cfg.get("cols", 42))
-    dev = cfg["printer_device"]
-    simulate = cfg.get("test_mode", False)
     # Use wrap_text to wrap and center each line
     lines = wrap_text(text, cols)
     centered_lines = []
@@ -384,7 +383,7 @@ def print_centered(text: str):
         pad = max(0, (cols - len(line)) // 2)
         centered_lines.append(" " * pad + line)
     payload = b"".join(encode_escpos(line) + b"\n" for line in centered_lines) + b"\n"
-    _write_raw(INIT + set_codepage_cp437() + ALIGN_CENTER + payload + ALIGN_LEFT, dev, simulate)
+    return INIT + set_codepage_cp437() + ALIGN_CENTER + payload + ALIGN_LEFT
 
 # ---------- Image printing (ESC/POS raster, chunked) ----------
 def _to_mono_bitmap(path: str, target_width_px: int, max_height_px: int) -> "Image.Image":
@@ -458,4 +457,5 @@ def print_image(path: str):
         print(f"[print_image] ERROR: {e}", flush=True)
         _write_raw(b"".join(chunks), dev, simulate)
     except Exception as e:
+        print(f"[print_image] ERROR: {e}", flush=True)
         print(f"[print_image] ERROR: {e}", flush=True)
