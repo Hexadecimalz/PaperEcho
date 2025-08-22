@@ -58,22 +58,27 @@ def submit():
     print("Include quote:", include_quote)
     print("Full form data:", request.form)
 
+    # Get footer text from config if present and non-empty
+    footer_text = config.get("footer", "").strip()
+    if not footer_text:
+        footer_text = None
+
     if form_type == "note":
         note = request.form.get("note_text", "").strip()
         print("Note content:", note)
         if note:
-            print_utils.print_note(note, include_quote)
+            print_utils.print_note(note, include_quote, footer_text)
 
     elif form_type == "todo":
         todo = request.form.get("todo_text", "").strip()
         print("Todo content:", todo)
         if todo:
-            print_utils.print_todo(todo, include_quote)
+            print_utils.print_todo(todo, include_quote, footer_text)
 
     elif form_type == "achievement":
         ach = request.form.get("achievement_text", "").strip()
         if ach:
-            print_utils.print_achievement(ach, include_quote)
+            print_utils.print_achievement(ach, include_quote, footer_text)
 
     elif form_type == "photo":
         photo = request.files.get("photo_file")

@@ -40,3 +40,6 @@ build/
 
 # Ignore quote rotation state
 quotes/.state.json
+
+# Ignore Media Uploads 
+static/uploads/*

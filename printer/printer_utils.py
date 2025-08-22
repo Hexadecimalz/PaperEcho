@@ -17,8 +17,6 @@ DEFAULTS = {
     # existing keys you already use
     "weather_api_key": "",
     "weather_location": "Denver,US",
-    "weather_enabled": False,
-    "weather_print_time": "07:00",
     "quote_footer_enabled": True,
     "test_mode": False,
     "printer_device": "/dev/usb/lp0",
@@ -199,7 +197,7 @@ def _header_block(title: str | None = None, show_date: bool = True) -> bytes:
 def _body_block(text: str, cols: int) -> bytes:
     return b"".join(encode_escpos(line) + b"\n" for line in wrap_text(text, cols))
 
-def _quote_block(enabled: bool) -> bytes:
+def _quote_block(enabled: bool, footer_text: str = None) -> bytes:
     if not enabled:
         return b""
     q = _next_quote()
@@ -216,7 +214,6 @@ def _quote_block(enabled: bool) -> bytes:
         by.append(q["source"])
     byline = (" — " + ", ".join(by)) if by else ""
 
-    # ASCII-only light separator to avoid '????'
     separator = ("- " * (cols // 2)).rstrip()
 
     wrapped = wrap_text(text, cols)
@@ -224,7 +221,8 @@ def _quote_block(enabled: bool) -> bytes:
         wrapped += [""] + wrap_text(byline, cols)
 
     output_lines = ["", "", separator, ""] + wrapped
-    return b"".join(encode_escpos(line) + b"\n" for line in output_lines)
+    result = b"".join(encode_escpos(line) + b"\n" for line in output_lines)
+    return result
 
 def _finalize() -> bytes:
     return b"\n\n" + CUT_PARTIAL
@@ -310,37 +308,80 @@ def print_weather_report():
     _print_payload(chunks)
 
 # ---------- Public text APIs ----------
-def print_note(note: str, include_quote: bool):
+def print_note(note: str, include_quote: bool, footer_text: str = None):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     chunks = [
         _header_block("NOTE", show_date=True),
         _body_block(note, cols),
         _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
-        _finalize(),
     ]
+    if (include_quote or cfg.get("quote_footer_enabled", False)) and footer_text:
+        chunks.append(separator_and_footer_bytes(footer_text))
+    chunks.append(_finalize())
     _print_payload(chunks)
 
-def print_todo(todo: str, include_quote: bool):
+def print_todo(todo: str, include_quote: bool, footer_text: str = None):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     body = f"{todo.strip()}" if todo and todo.strip() else ""
     chunks = [
         _header_block("TODO", show_date=True),
         _body_block(body, cols),
         _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
-        _finalize(),
     ]
+    if (include_quote or cfg.get("quote_footer_enabled", False)) and footer_text:
+        chunks.append(separator_and_footer_bytes(footer_text))
+    chunks.append(_finalize())
     _print_payload(chunks)
 
-def print_achievement(text: str, include_quote: bool):
+def print_achievement(text: str, include_quote: bool, footer_text: str = None):
     cfg = load_config(); cols = int(cfg.get("cols", 42))
     body = f"* {text.strip()}"
     chunks = [
         _header_block("New Achievement", show_date=True),
         _body_block(body, cols),
         _quote_block(include_quote or cfg.get("quote_footer_enabled", False)),
-        _finalize(),
     ]
+    if (include_quote or cfg.get("quote_footer_enabled", False)) and footer_text:
+        chunks.append(separator_and_footer_bytes(footer_text))
+    chunks.append(_finalize())
     _print_payload(chunks)
+
+def separator_and_footer_bytes(footer_text: str) -> bytes:
+    # Return bytes for separator image and centered footer text
+    return print_image_centered_bytes('./static/images/separator.png') + print_centered_bytes(footer_text)
+
+def print_image_centered_bytes(image_path: str) -> bytes:
+    cfg = load_config()
+    width_px = int(cfg.get("printer_width_px", 384))
+    max_h = 200  # Separator image should be short
+    chunk = int(cfg.get("raster_chunk_rows", 160))
+    try:
+        from PIL import Image, ImageOps
+        img = _to_mono_bitmap(image_path, target_width_px=width_px, max_height_px=max_h)
+        h = img.size[1]
+        chunks: list[bytes] = [INIT, set_codepage_cp437(), ALIGN_CENTER]
+        y = 0
+        while y < h:
+            rows = min(chunk, h - y)
+            chunks.append(_raster_chunk_cmd(img, y, rows))
+            y += rows
+        chunks += [ALIGN_LEFT, b"\n"]
+        return b"".join(chunks)
+    except Exception as e:
+        print(f"[print_image_centered_bytes] ERROR: {e}", flush=True)
+        return b""
+
+def print_centered_bytes(text: str) -> bytes:
+    cfg = load_config()
+    cols = int(cfg.get("cols", 42))
+    # Use wrap_text to wrap and center each line
+    lines = wrap_text(text, cols)
+    centered_lines = []
+    for line in lines:
+        pad = max(0, (cols - len(line)) // 2)
+        centered_lines.append(" " * pad + line)
+    payload = b"".join(encode_escpos(line) + b"\n" for line in centered_lines) + b"\n"
+    return INIT + set_codepage_cp437() + ALIGN_CENTER + payload + ALIGN_LEFT
 
 # ---------- Image printing (ESC/POS raster, chunked) ----------
 def _to_mono_bitmap(path: str, target_width_px: int, max_height_px: int) -> "Image.Image":
@@ -411,4 +452,10 @@ def print_image(path: str):
         chunks += [ALIGN_LEFT, b"\n\n", CUT_PARTIAL]
         _write_raw(b"".join(chunks), dev, simulate)
     except Exception as e:
+        print(f"[print_image] ERROR: {e}", flush=True)
+        _write_raw(b"".join(chunks), dev, simulate)
+    except Exception as e:
+        print(f"[print_image] ERROR: {e}", flush=True)
+        print(f"[print_image] ERROR: {e}", flush=True)
+        print(f"[print_image] ERROR: {e}", flush=True)
         print(f"[print_image] ERROR: {e}", flush=True)
